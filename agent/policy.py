@@ -37,4 +37,16 @@ class PolicyContext:
 
 
 def check(context: PolicyContext) -> tuple[bool, str]:
-    raise NotImplementedError("BƯỚC 3b: implement policy check")
+    if context.data_classification == "restricted" and context.egress_enabled:
+        return False, (
+            f"deny: data_classification=restricted voi egress_enabled=True "
+            f"(agent_owner={context.agent_owner}, purpose={context.request_purpose}, "
+            f"delegation_depth={context.delegation_depth}) - du lieu restricted "
+            f"khong duoc phep roi khoi he thong qua egress"
+        )
+
+    return True, (
+        f"allow: data_classification={context.data_classification}, "
+        f"egress_enabled={context.egress_enabled}, purpose={context.request_purpose}, "
+        f"agent_owner={context.agent_owner}, delegation_depth={context.delegation_depth}"
+    )
