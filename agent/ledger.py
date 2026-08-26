@@ -33,12 +33,69 @@ rồi gọi verify() phải trả về False.
 """
 from __future__ import annotations
 
+import hashlib
+import json
 from pathlib import Path
+
+GENESIS_HASH = "0" * 64
+
+
+def _hash_record(record_without_hash: dict) -> str:
+    payload = json.dumps(record_without_hash, sort_keys=True, ensure_ascii=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
+
+def _last_hash(path: Path) -> str:
+    if not path.exists():
+        return GENESIS_HASH
+    last_hash = GENESIS_HASH
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            last_hash = json.loads(line)["hash"]
+    return last_hash
 
 
 def append(entry: dict, path: Path) -> dict:
-    raise NotImplementedError("BƯỚC 3d: implement ledger append")
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+
+    record = dict(entry)
+    record["prev_hash"] = _last_hash(path)
+    record["hash"] = _hash_record(record)
+
+    with path.open("a", encoding="utf-8") as f:
+        f.write(json.dumps(record, sort_keys=True, ensure_ascii=False) + "\n")
+
+    return record
 
 
 def verify(path: Path) -> bool:
-    raise NotImplementedError("BƯỚC 3d: implement ledger verify")
+    path = Path(path)
+    if not path.exists():
+        return True
+
+    expected_prev_hash = GENESIS_HASH
+    with path.open(encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            record = json.loads(line)
+
+            if not record.get("reason"):
+                return False
+            if record.get("prev_hash") != expected_prev_hash:
+                return False
+
+            claimed_hash = record.get("hash")
+            recomputed = dict(record)
+            recomputed.pop("hash", None)
+            if _hash_record(recomputed) != claimed_hash:
+                return False
+
+            expected_prev_hash = claimed_hash
+
+    return True
